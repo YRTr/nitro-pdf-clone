@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NitroPDF Pro — Enterprise Document & PDF Editor</title>
+
+  <!-- Google Fonts (Inter for UI, JetBrains Mono for coordinates, Alex Brush for Signatures) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Core PDF & Canvas Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="bg-slate-900 text-slate-100 h-screen w-screen overflow-hidden flex flex-col select-none">
+
+  <!-- Hidden File Input for Opening Real PDFs -->
+  <input type="file" id="pdf-upload-input" accept="application/pdf" class="hidden" />
+  <input type="file" id="image-upload-input" accept="image/*" class="hidden" />
+
+  <!-- 1. TOP APPLICATION HEADER BAR -->
+  <header class="h-10 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 bg-orange-600/15 border border-orange-500/40 px-2.5 py-1 rounded text-orange-400 font-bold text-xs tracking-wider">
+        <i data-lucide="Flame" class="w-4 h-4 text-orange-500"></i>
+        <span>NITRO<span class="text-white font-normal">PDF PRO</span></span>
+      </div>
+
+      <!-- Quick Access Actions -->
+      <div class="flex items-center gap-1 border-l border-slate-800 pl-3">
+        <button id="btn-open-pdf" class="p-1.5 hover:bg-slate-800 rounded text-slate-300 hover:text-white" title="Open PDF File">
+          <i data-lucide="folder-open" class="w-4 h-4"></i>
+        </button>
+        <button id="btn-save-pdf" class="p-1.5 hover:bg-slate-800 rounded text-slate-300 hover:text-white" title="Export / Save PDF">
+          <i data-lucide="save" class="w-4 h-4"></i>
+        </button>
+        <button id="btn-undo" class="p-1.5 hover:bg-slate-800 rounded text-slate-300 hover:text-white" title="Undo Last Annotation (Ctrl+Z)">
+          <i data-lucide="undo-2" class="w-4 h-4"></i>
+        </button>
+        <button id="btn-print" class="p-1.5 hover:bg-slate-800 rounded text-slate-300 hover:text-white" title="Print Document">
+          <i data-lucide="printer" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Active Document Filename -->
+    <div class="flex items-center gap-2 text-xs text-slate-400 font-mono bg-slate-900 px-3 py-1 rounded border border-slate-800">
+      <i data-lucide="file-text" class="w-3.5 h-3.5 text-orange-400"></i>
+      <span id="doc-title">Enterprise_Architecture_Dossier.pdf</span>
+      <span id="doc-badge" class="bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded text-[10px]">EDITABLE</span>
+    </div>
+
+    <!-- Primary Export CTA -->
+    <div class="flex items-center gap-2">
+      <button id="btn-export-main" class="bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold px-3 py-1.5 rounded flex items-center gap-1.5 shadow">
+        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+        <span>Export PDF</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 2. RIBBON TAB NAVIGATION BAR -->
+  <nav class="bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-1 pt-1" id="ribbon-tabs">
+      <button data-tab="home" class="ribbon-tab active px-4 py-1.5 text-xs font-semibold rounded-t">Home</button>
+      <button data-tab="edit" class="ribbon-tab px-4 py-1.5 text-xs font-semibold rounded-t">Edit & Insert</button>
+      <button data-tab="review" class="ribbon-tab px-4 py-1.5 text-xs font-semibold rounded-t">Review & Markup</button>
+      <button data-tab="protect" class="ribbon-tab px-4 py-1.5 text-xs font-semibold rounded-t">Protect & Sign</button>
+      <button data-tab="convert" class="ribbon-tab px-4 py-1.5 text-xs font-semibold rounded-t">Convert & Export</button>
+    </div>
+
+    <!-- Contextual Color & Size Controls -->
+    <div class="flex items-center gap-3 py-1 text-xs">
+      <div class="flex items-center gap-1.5">
+        <span class="text-slate-400">Color:</span>
+        <input type="color" id="prop-color" value="#ea580c" class="w-6 h-6 rounded cursor-pointer bg-transparent border border-slate-700" />
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-slate-400">Size/Font:</span>
+        <select id="prop-size" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white">
+          <option value="12">12 px</option>
+          <option value="16" selected>16 px</option>
+          <option value="20">20 px</option>
+          <option value="28">28 px</option>
+          <option value="36">36 px</option>
+        </select>
+      </div>
+    </div>
+  </nav>
+
+  <!-- 3. RIBBON TOOL PANELS -->
+  <section class="h-20 bg-slate-900/95 border-b border-slate-800 px-4 flex items-center gap-4 shrink-0 overflow-x-auto">
+
+    <!-- TAB: HOME -->
+    <div id="panel-home" class="ribbon-panel flex items-center gap-4">
+      <div class="ribbon-group">
+        <button id="tool-open" class="ribbon-btn">
+          <i data-lucide="folder-open" class="w-5 h-5 text-orange-400"></i>
+          <span>Open PDF</span>
+        </button>
+        <button data-tool="select" class="ribbon-btn tool-btn active">
+          <i data-lucide="mouse-pointer" class="w-5 h-5 text-sky-400"></i>
+          <span>Select</span>
+        </button>
+        <button data-tool="hand" class="ribbon-btn tool-btn">
+          <i data-lucide="hand" class="w-5 h-5 text-amber-400"></i>
+          <span>Pan Hand</span>
+        </button>
+      </div>
+
+      <div class="ribbon-divider"></div>
+
+      <div class="ribbon-group">
+        <button id="btn-zoom-out" class="ribbon-btn">
+          <i data-lucide="zoom-out" class="w-5 h-5"></i>
+          <span>Zoom Out</span>
+        </button>
+        <span id="zoom-label" class="font-mono text-xs bg-slate-800 px-2.5 py-1 rounded border border-slate-700">100%</span>
+        <button id="btn-zoom-in" class="ribbon-btn">
+          <i data-lucide="zoom-in" class="w-5 h-5"></i>
+          <span>Zoom In</span>
+        </button>
+      </div>
+
+      <div class="ribbon-divider"></div>
+
+      <div class="ribbon-group">
+        <button id="btn-add-page" class="ribbon-btn">
+          <i data-lucide="file-plus-2" class="w-5 h-5 text-emerald-400"></i>
+          <span>New Page</span>
+        </button>
+        <button id="btn-rotate-page" class="ribbon-btn">
+          <i data-lucide="rotate-cw" class="w-5 h-5 text-purple-400"></i>
+          <span>Rotate 90°</span>
+        </button>
+        <button id="btn-delete-page" class="ribbon-btn">
+          <i data-lucide="trash-2" class="w-5 h-5 text-rose-400"></i>
+          <span>Delete Page</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB: EDIT & INSERT -->
+    <div id="panel-edit" class="ribbon-panel hidden items-center gap-4">
+      <div class="ribbon-group">
+        <button id="btn-toggle-edit-text" class="ribbon-btn">
+          <i data-lucide="file-pen-line" class="w-5 h-5 text-orange-400"></i>
+          <span>Edit Page Text</span>
+        </button>
+        <button data-tool="textbox" class="ribbon-btn tool-btn">
+          <i data-lucide="type" class="w-5 h-5 text-sky-400"></i>
+          <span>Add Text</span>
+        </button>
+        <button id="btn-insert-image" class="ribbon-btn">
+          <i data-lucide="image-plus" class="w-5 h-5 text-emerald-400"></i>
+          <span>Add Image</span>
+        </button>
+      </div>
+
+      <div class="ribbon-divider"></div>
+
+      <div class="ribbon-group">
+        <button data-tool="rect" class="ribbon-btn tool-btn">
+          <i data-lucide="square" class="w-5 h-5 text-indigo-400"></i>
+          <span>Rectangle</span>
+        </button>
+        <button data-tool="draw" class="ribbon-btn tool-btn">
+          <i data-lucide="pen-tool" class="w-5 h-5 text-pink-400"></i>
+          <span>Freehand</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB: REVIEW & MARKUP -->
+    <div id="panel-review" class="ribbon-panel hidden items-center gap-4">
+      <div class="ribbon-group">
+        <button data-tool="highlight" class="ribbon-btn tool-btn">
+          <i data-lucide="highlighter" class="w-5 h-5 text-yellow-400"></i>
+          <span>Highlight</span>
+        </button>
+        <button data-tool="strike" class="ribbon-btn tool-btn">
+          <i data-lucide="strikethrough" class="w-5 h-5 text-rose-400"></i>
+          <span>Strikethrough</span>
+        </button>
+        <button data-tool="note" class="ribbon-btn tool-btn">
+          <i data-lucide="message-square-plus" class="w-5 h-5 text-amber-400"></i>
+          <span>Sticky Note</span>
+        </button>
+      </div>
+
+      <div class="ribbon-divider"></div>
+
+      <div class="ribbon-group">
+        <button data-stamp="APPROVED" class="ribbon-btn stamp-btn">
+          <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400"></i>
+          <span>Approved</span>
+        </button>
+        <button data-stamp="CONFIDENTIAL" class="ribbon-btn stamp-btn">
+          <i data-lucide="shield-alert" class="w-5 h-5 text-rose-400"></i>
+          <span>Confidential</span>
+        </button>
+        <button data-stamp="DRAFT" class="ribbon-btn stamp-btn">
+          <i data-lucide="file-warning" class="w-5 h-5 text-amber-400"></i>
+          <span>Draft</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB: PROTECT & SIGN -->
+    <div id="panel-protect" class="ribbon-panel hidden items-center gap-4">
+      <div class="ribbon-group">
+        <button id="btn-open-sign" class="ribbon-btn">
+          <i data-lucide="signature" class="w-5 h-5 text-orange-400"></i>
+          <span>QuickSign™</span>
+        </button>
+        <button data-tool="redact" class="ribbon-btn tool-btn">
+          <i data-lucide="eye-off" class="w-5 h-5 text-rose-500"></i>
+          <span>Redact Area</span>
+        </button>
+        <button id="btn-watermark" class="ribbon-btn">
+          <i data-lucide="stamp" class="w-5 h-5 text-sky-400"></i>
+          <span>Toggle Watermark</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB: CONVERT & EXPORT -->
+    <div id="panel-convert" class="ribbon-panel hidden items-center gap-4">
+      <div class="ribbon-group">
+        <button id="btn-export-word" class="ribbon-btn">
+          <i data-lucide="file-text" class="w-5 h-5 text-blue-400"></i>
+          <span>To Word (.doc)</span>
+        </button>
+        <button id="btn-export-excel" class="ribbon-btn">
+          <i data-lucide="table" class="w-5 h-5 text-emerald-400"></i>
+          <span>To Excel (.csv)</span>
+        </button>
+        <button id="btn-export-png" class="ribbon-btn">
+          <i data-lucide="image" class="w-5 h-5 text-purple-400"></i>
+          <span>Page to PNG</span>
+        </button>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- 4. MAIN 3-COLUMN WORKSPACE -->
+  <main class="flex-1 flex overflow-hidden">
+
+    <!-- LEFT SIDEBAR: THUMBNAILS -->
+    <aside class="w-52 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
+      <div class="p-2.5 border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+        <span>Pages</span>
+        <span id="page-count-badge" class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono">1</span>
+      </div>
+      <div id="thumbnail-list" class="flex-1 overflow-y-auto p-3 space-y-3"></div>
+    </aside>
+
+    <!-- CENTER VIEWPORT: DOCUMENT CANVAS -->
+    <section id="workspace-viewport" class="flex-1 bg-slate-950 overflow-auto p-8 flex flex-col items-center gap-8 relative">
+      <div id="pages-container" class="flex flex-col items-center gap-8"></div>
+    </section>
+
+    <!-- RIGHT SIDEBAR: INSPECTOR & OBJECT LIST -->
+    <aside class="w-64 bg-slate-900 border-l border-slate-800 flex flex-col shrink-0">
+      <div class="p-2.5 border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        Inspector & Layers
+      </div>
+
+      <div id="inspector-panel" class="p-3 border-b border-slate-800 text-xs space-y-2">
+        <p class="text-slate-500 italic">Select any annotation on the page to inspect or delete it.</p>
+      </div>
+
+      <div class="p-2.5 border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        Active Annotations
+      </div>
+      <div id="annotations-list" class="flex-1 overflow-y-auto p-2 space-y-1.5 text-xs"></div>
+    </aside>
+
+  </main>
+
+  <!-- 5. STATUS BAR -->
+  <footer class="h-7 bg-slate-950 border-t border-slate-800 px-4 flex items-center justify-between text-[11px] text-slate-400 shrink-0">
+    <div class="flex items-center gap-4">
+      <span id="status-tool">Active Tool: <strong class="text-orange-400">Select</strong></span>
+      <span id="status-coords" class="font-mono">X: 0, Y: 0</span>
+    </div>
+    <div id="status-message" class="text-emerald-400 font-medium">Ready</div>
+  </footer>
+
+  <!-- 6. QUICKSIGN SIGNATURE MODAL -->
+  <div id="sign-modal" class="fixed inset-0 bg-black/75 hidden items-center justify-center z-50">
+    <div class="bg-slate-900 border border-slate-700 rounded-lg w-[460px] p-5 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 class="font-semibold text-sm flex items-center gap-2">
+          <i data-lucide="signature" class="w-4 h-4 text-orange-400"></i>
+          <span>Nitro QuickSign™ Signature Pad</span>
+        </h3>
+        <button id="btn-close-sign" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="my-4 space-y-3">
+        <p class="text-xs text-slate-400">Draw your signature below or type your name for cursive stamping:</p>
+        <canvas id="sign-pad" width="418" height="140" class="bg-white rounded border border-slate-700 cursor-crosshair"></canvas>
+        <div class="flex items-center gap-2">
+          <input type="text" id="sign-type-input" placeholder="Or type full name here..." class="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-xs text-white" />
+          <button id="btn-clear-sign" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-xs">Clear</button>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
+        <button id="btn-apply-sign" class="bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold px-4 py-2 rounded">
+          Stamp Signature on Page
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
