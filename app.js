@@ -1,4 +1,4 @@
-// Configure PDF.js worker
+// [part1] Configure PDF.js worker
 /* define the central state store (state), and load a built-in editable document so the
 editor works out of the box even before uploading a local PDF*/
 if (window.pdfjsLib) {
@@ -83,11 +83,11 @@ function setStatus(message) {
   if (el) el.textContent = message;
 }
 
-// Render all pages and sidebar thumbnails
+
+// [part2] Render all pages and sidebar thumbnails
 /* handles rendering each page, drawing uploaded PDF pages via PDF.js, updating the left thumbnail sidebar, 
  and managing page rotations, additions and deletions. */
 
-// Render all pages and sidebar thumbnails
 function renderWorkspace() {
   const container = document.getElementById('pages-container');
   const thumbList = document.getElementById('thumbnail-list');
@@ -213,7 +213,9 @@ async function loadPdfFile(file) {
   }
 }
 
-// Create DOM node for an annotation object
+
+
+// [part3] Create DOM node for an annotation object
 function createAnnotationElement(ann, pageIdx) {
   const el = document.createElement('div');
   el.className = `annotation-item ${state.selectedAnnotationId === ann.id ? 'selected' : ''}`;
@@ -392,3 +394,293 @@ function renderAnnotationsList() {
     });
   });
 }
+
+
+// [part4] QuickSign™ Pad, Native PDF compilation (pdf-lib) & Event Bindings (continued in app.js)
+/* it connects the QuickSign™ signature canvas, compiles the entire multi-page document (including annotations, watermarks, and signatures)
+into a real downloadable .pdf file using pdf-lib + html2canvas, and binds all Ribbon buttons */
+
+// Switch active tool
+function setActiveTool(toolName) {
+  state.activeTool = toolName;
+  document.querySelectorAll('.tool-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.tool === toolName);
+  });
+  document.getElementById('status-tool').innerHTML = `Active Tool: <strong class="text-orange-400 uppercase">${toolName}</strong>`;
+}
+
+// Compile & Export Real Multi-Page PDF using pdf-lib + html2canvas
+async function exportCompiledPdf() {
+  try {
+    setStatus('Compiling native PDF document...');
+    const { PDFDocument } = window.PDFLib;
+    const pdfDoc = await PDFDocument.create();
+
+    const pageSheets = document.querySelectorAll('.pdf-page-sheet');
+    for (let i = 0; i < pageSheets.length; i++) {
+      const sheet = pageSheets[i];
+      const prevTransform = sheet.style.transform;
+      sheet.style.transform = 'none';
+
+      const canvas = await window.html2canvas(sheet, { scale: 1.5, useCORS: true });
+      sheet.style.transform = prevTransform;
+
+      const imgData = canvas.toDataURL('image/png');
+      const pngImage = await pdfDoc.embedPng(imgData);
+
+      const page = pdfDoc.addPage([595.28, 841.89]); // Standard A4 in PDF points
+      page.drawImage(pngImage, {
+        x: 0,
+        y: 0,
+        width: 595.28,
+        height: 841.89
+      });
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = document.getElementById('doc-title').textContent || 'NitroPDF_Export.pdf';
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatus('PDF exported successfully!');
+  } catch (err) {
+    console.error(err);
+    setStatus('Error exporting PDF.');
+  }
+}
+
+// Initialize QuickSign Signature Pad & Ribbon Listeners
+window.addEventListener('DOMContentLoaded', () => {
+  renderWorkspace();
+
+  // Ribbon Tab Switching
+  document.querySelectorAll('.ribbon-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.ribbon-tab').forEach((t) => t.classList.remove('active'));
+      document.querySelectorAll('.ribbon-panel').forEach((p) => p.classList.add('hidden'));
+
+      tab.classList.add('active');
+      const targetPanel = document.getElementById(`panel-${tab.dataset.tab}`);
+      if (targetPanel) {
+        targetPanel.classList.remove('hidden');
+        targetPanel.classList.add('flex');
+      }
+    });
+  });
+
+  // Tool Buttons
+  document.querySelectorAll('.tool-btn').forEach((btn) => {
+    btn.addEventListener('click', () => setActiveTool(btn.dataset.tool));
+  });
+
+  // Color & Font Size pickers
+  document.getElementById('prop-color').addEventListener('input', (e) => (state.color = e.target.value));
+  document.getElementById('prop-size').addEventListener('change', (e) => (state.fontSize = Number(e.target.value)));
+
+  // Open Real PDF File
+  const pdfInput = document.getElementById('pdf-upload-input');
+  document.getElementById('btn-open-pdf').addEventListener('click', () => pdfInput.click());
+  document.getElementById('tool-open').addEventListener('click', () => pdfInput.click());
+  pdfInput.addEventListener('change', (e) => {
+    if (e.target.files[0]) loadPdfFile(e.target.files[0]);
+  });
+
+  // Insert Image Annotation
+  const imgInput = document.getElementById('image-upload-input');
+  document.getElementById('btn-insert-image').addEventListener('click', () => imgInput.click());
+  imgInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      state.pages[state.activePageIndex].annotations.push({
+        id: 'ann-' + Date.now(),
+        type: 'image',
+        x: 120,
+        y: 160,
+        width: 200,
+        src: reader.result
+      });
+      renderWorkspace();
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // Zoom Controls
+  document.getElementById('btn-zoom-in').addEventListener('click', () => {
+    state.zoom = Math.min(1.8, +(state.zoom + 0.1).toFixed(1));
+    document.getElementById('zoom-label').textContent = `${Math.round(state.zoom * 100)}%`;
+    renderWorkspace();
+  });
+  document.getElementById('btn-zoom-out').addEventListener('click', () => {
+    state.zoom = Math.max(0.5, +(state.zoom - 0.1).toFixed(1));
+    document.getElementById('zoom-label').textContent = `${Math.round(state.zoom * 100)}%`;
+    renderWorkspace();
+  });
+
+  // Page Operations (Add, Rotate, Delete)
+  document.getElementById('btn-add-page').addEventListener('click', () => {
+    state.pages.push({
+      id: `page-${Date.now()}`,
+      rotation: 0,
+      pdfCanvasDataUrl: null,
+      htmlContent: `<div class="p-12"><h2 class="text-xl font-bold">New Blank Page</h2><p class="text-sm text-slate-600 mt-2">Click "Edit Page Text" or "Add Text" to populate this page.</p></div>`,
+      annotations: []
+    });
+    state.activePageIndex = state.pages.length - 1;
+    renderWorkspace();
+  });
+
+  document.getElementById('btn-rotate-page').addEventListener('click', () => {
+    const page = state.pages[state.activePageIndex];
+    page.rotation = (page.rotation + 90) % 360;
+    renderWorkspace();
+  });
+
+  document.getElementById('btn-delete-page').addEventListener('click', () => {
+    if (state.pages.length <= 1) return setStatus('Cannot delete the only remaining page.');
+    state.pages.splice(state.activePageIndex, 1);
+    state.activePageIndex = Math.max(0, state.activePageIndex - 1);
+    renderWorkspace();
+  });
+
+  // Direct Text Edit Toggle
+  document.getElementById('btn-toggle-edit-text').addEventListener('click', (e) => {
+    state.isTextEditable = !state.isTextEditable;
+    e.currentTarget.classList.toggle('active', state.isTextEditable);
+    renderWorkspace();
+    setStatus(state.isTextEditable ? 'Direct Page Text Editing Enabled' : 'Direct Text Editing Disabled');
+  });
+
+  // Rubber Stamps
+  document.querySelectorAll('.stamp-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.pages[state.activePageIndex].annotations.push({
+        id: 'ann-' + Date.now(),
+        type: 'stamp',
+        text: btn.dataset.stamp,
+        x: 240,
+        y: 180
+      });
+      renderWorkspace();
+    });
+  });
+
+  // Watermark Toggle
+  document.getElementById('btn-watermark').addEventListener('click', () => {
+    state.watermarkEnabled = !state.watermarkEnabled;
+    renderWorkspace();
+  });
+
+  // Undo Last Annotation
+  document.getElementById('btn-undo').addEventListener('click', () => {
+    const anns = state.pages[state.activePageIndex].annotations;
+    if (anns.length > 0) {
+      anns.pop();
+      renderWorkspace();
+      setStatus('Undid last annotation');
+    }
+  });
+
+  // QuickSign Modal Logic
+  const signModal = document.getElementById('sign-modal');
+  const signCanvas = document.getElementById('sign-pad');
+  const signCtx = signCanvas.getContext('2d');
+  let drawingSign = false;
+
+  signCanvas.addEventListener('mousedown', (e) => {
+    drawingSign = true;
+    signCtx.beginPath();
+    signCtx.moveTo(e.offsetX, e.offsetY);
+  });
+  signCanvas.addEventListener('mousemove', (e) => {
+    if (!drawingSign) return;
+    signCtx.lineWidth = 2.5;
+    signCtx.lineCap = 'round';
+    signCtx.strokeStyle = '#0f172a';
+    signCtx.lineTo(e.offsetX, e.offsetY);
+    signCtx.stroke();
+  });
+  window.addEventListener('mouseup', () => (drawingSign = false));
+
+  document.getElementById('btn-open-sign').addEventListener('click', () => {
+    signModal.classList.remove('hidden');
+    signModal.classList.add('flex');
+  });
+  document.getElementById('btn-close-sign').addEventListener('click', () => {
+    signModal.classList.add('hidden');
+  });
+  document.getElementById('btn-clear-sign').addEventListener('click', () => {
+    signCtx.clearRect(0, 0, signCanvas.width, signCanvas.height);
+    document.getElementById('sign-type-input').value = '';
+  });
+
+  document.getElementById('btn-apply-sign').addEventListener('click', () => {
+    const typed = document.getElementById('sign-type-input').value.trim();
+    if (typed) {
+      signCtx.clearRect(0, 0, signCanvas.width, signCanvas.height);
+      signCtx.font = '44px "Alex Brush", cursive';
+      signCtx.fillStyle = '#0f172a';
+      signCtx.fillText(typed, 24, 85);
+    }
+
+    state.pages[state.activePageIndex].annotations.push({
+      id: 'ann-' + Date.now(),
+      type: 'signature',
+      x: 260,
+      y: 720,
+      width: 200,
+      src: signCanvas.toDataURL('image/png')
+    });
+
+    signModal.classList.add('hidden');
+    renderWorkspace();
+    setStatus('QuickSign™ signature stamped onto page');
+  });
+
+  // Export & Save Triggers
+  document.getElementById('btn-export-main').addEventListener('click', exportCompiledPdf);
+  document.getElementById('btn-save-pdf').addEventListener('click', exportCompiledPdf);
+  document.getElementById('btn-print').addEventListener('click', () => window.print());
+
+  // Convert to Word (.doc)
+  document.getElementById('btn-export-word').addEventListener('click', () => {
+    const html = state.pages.map((p) => p.htmlContent).join('<hr/>');
+    const blob = new Blob([`<html><body>${html}</body></html>`], { type: 'application/msword' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Converted_Document.doc';
+    a.click();
+  });
+
+  // Convert Tables to Excel (.csv)
+  document.getElementById('btn-export-excel').addEventListener('click', () => {
+    const rows = Array.from(document.querySelectorAll('.pdf-page-sheet table tr'));
+    const csv = rows
+      .map((r) =>
+        Array.from(r.querySelectorAll('th,td'))
+          .map((c) => `"${c.innerText.replace(/"/g, '""')}"`)
+          .join(',')
+      )
+      .join('\n');
+    const blob = new Blob([csv || 'Column A,Column B\nSample,Data'], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Extracted_Tables.csv';
+    a.click();
+  });
+
+  // Export Current Page to PNG
+  document.getElementById('btn-export-png').addEventListener('click', async () => {
+    const sheet = document.querySelectorAll('.pdf-page-sheet')[state.activePageIndex];
+    const canvas = await window.html2canvas(sheet, { scale: 2 });
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = `Page_${state.activePageIndex + 1}.png`;
+    a.click();
+  });
+});
