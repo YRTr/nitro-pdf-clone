@@ -1,0 +1,25 @@
+base architecture:
+-----------------
+
+nitro-pdf-clone/
+├── index.html
+├── styles.css
+└── app.js
+
+
+upgraded architecture (refactored):
+----------------------------------
+
+nitro-pdf-clone/
+├── index.html
+├── styles.css
+└── src/
+    ├── main.js               # Entry point & event bindings
+    ├── state.js              # Central state store & status helpers
+    ├── core/
+    │   ├── pdfLoader.js      # PDF.js parsing & file import
+    │   └── pdfExporter.js    # pdf-lib + html2canvas native compilation
+    └── ui/
+        ├── workspace.js      # Page sheet & thumbnail rendering
+        ├── annotations.js    # Dragging, creation, & right-sidebar inspector
+        └── signModal.js      # QuickSign™ canvas pad logic
