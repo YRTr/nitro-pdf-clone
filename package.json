@@ -1,0 +1,13 @@
+{
+  "dependencies": {
+    "html2canvas": "^1.4.1",
+    "lucide": "^1.61.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.4.299"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.31",
+    "tailwindcss": "^4.3.3"
+  }
+}
